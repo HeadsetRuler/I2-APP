@@ -21,5 +21,22 @@ func groet() string {
 }
 
 func main() {
-    fmt.Println(groet())
+    var kentekens = map[string]bool{
+        "12-AB-34": true,
+        "56-CD-78": true,
+        "90-EF-12": true}
+    var plate string
+    n, err := fmt.Scan(&plate)
+    if n == 0 || err != nil {
+        fmt.Println("Geen kenteken opgegeven")
+        return
+    }
+    if kentekens[plate] {
+        fmt.Println(groet())
+    } else {
+        fmt.Println("U heeft helaas geen toegang tot het parkeerterrein")
+    }
+
+
+    fmt.Println()
 }
