@@ -2,37 +2,71 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 	"time"
+
+	flag "github.com/spf13/pflag"
+
+	"github.com/sirupsen/logrus"
 )
+
 type configuration struct {
 	AllowedPlates []string
+	logFile string
+	logLevel string
 }
+
+var log = logrus.New()
+
 
 func main() {
 	configPath := flag.String("config", "config.json", "path to the configuration file")
+	logLevel := flag.StringP("loglevel", "l", "", "log level")
 	flag.Parse()
-	config, err := loadConfig(*configPath)
-	if err != nil {
-		fmt.Println("Error loading configuration:", err)
-		return
+	config, configErr := loadConfig(*configPath)
+
+	logFile, logFileErr := os.OpenFile(config.logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if logFileErr != nil {
+		log.WithError(logFileErr).WithField("path", config.logFile).Warn("Failed to open log file, using stderr")
+	} else {
+		log.Out = logFile
+		log.SetNoLock()
+	}
+	if configErr != nil {
+		log.WithError(configErr).WithField("path", *configPath).Warn("Failed to parse config, using defaults")
+	} else {
+		log.WithField("path", *configPath).Info("Loaded config")
+	}
+	var logLevelErr error
+	if len(*logLevel) > 0 {
+		var level logrus.Level
+		level, logLevelErr = logrus.ParseLevel(*logLevel)
+		if logLevelErr != nil {
+			log.WithError(logLevelErr).WithField("level", *logLevel).Warn("Failed to parse explicitly given log level, falling back to config")
+		} else {
+			log.SetLevel(level)
+		}
+	}
+	if logLevelErr != nil || len(*logLevel) == 0{
+		logLevelErr = nil
+		var level logrus.Level
+		level, logLevelErr = logrus.ParseLevel(config.logLevel)
+		if logLevelErr != nil {
+			log.WithError(logLevelErr).WithField("level", config.logLevel).Warn("Failed to parse log level from config, using default (error)")
+		} else {
+			log.SetLevel(level)
+		}
+	}
+ 
+
+	kentekens := make(map[string]bool)
+	for _, p := range config.AllowedPlates {
+		kentekens[p] = true
 	}
 
 	plate := flag.Arg(0)
-	var kentekens map[string]bool
-	if(len(config.AllowedPlates) > 0) {
-		kentekens = make(map[string]bool)
-		for _, p := range config.AllowedPlates {
-			kentekens[p] = true
-		}
-	} else {
-		kentekens = 	map[string]bool{
-		"12-AB-34": true,
-		"56-CD-78": true,
-		"90-EF-12": true}
-	}
+	
 	now := time.Now()
 	if len(plate) == 0 {
 		fmt.Print("Kenteken: ")
@@ -49,15 +83,29 @@ func main() {
 	}
 }
 
+// Loads and parses config, setting defaults if necessary
 func loadConfig(path string) (configuration, error) {
+	var config configuration
 	file, err := os.Open(path)
 	if err != nil {
-		return configuration{}, err
+		log.WithError(err).WithField("path", path).Warn("Failed to open config file, using defaults")
+		err = nil
+	} else {
+		defer file.Close()
+		decoder := json.NewDecoder(file)
+		err = decoder.Decode(&config)
 	}
-	defer file.Close()
-	decoder := json.NewDecoder(file)
-	var config configuration
-	err = decoder.Decode(&config)
+	
+	// Set defaults
+	if err != nil || len(config.logFile) == 0 {
+		config.logFile = "kenteken.log"
+	}
+	if(err != nil || len(config.AllowedPlates) == 0) {
+		config.AllowedPlates = []string{"12-AB-34", "56-CD-78", "90-EF-12"}
+	}
+	if(err != nil || len(config.logLevel) == 0) {
+		config.logLevel = "error"
+	}
 	return config, err
 }
 
@@ -79,5 +127,7 @@ func groet(now time.Time) string {
 }
 
 func kentekenChecker(plate string, kentekens map[string]bool) bool {
-	return kentekens[plate]
+	allowed := kentekens[plate]
+	log.WithField("plate", plate).WithField("allowed", allowed).Info("Checking license plate")
+	return allowed
 }
