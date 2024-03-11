@@ -38,20 +38,11 @@ func main() {
 	} else {
 		log.WithField("path", *configPath).Info("Loaded config")
 	}
-	var logLevelErr error
 	if len(*logLevel) > 0 {
-		var level logrus.Level
-		level, logLevelErr = logrus.ParseLevel(*logLevel)
-		if logLevelErr != nil {
-			log.WithError(logLevelErr).WithField("level", *logLevel).Warn("Failed to parse explicitly given log level, falling back to config")
-		} else {
-			log.SetLevel(level)
-		}
+		config.logLevel = *logLevel
 	}
-	if logLevelErr != nil || len(*logLevel) == 0{
-		logLevelErr = nil
-		var level logrus.Level
-		level, logLevelErr = logrus.ParseLevel(config.logLevel)
+	if len(config.logLevel) == 0{
+		level, logLevelErr := logrus.ParseLevel(config.logLevel)
 		if logLevelErr != nil {
 			log.WithError(logLevelErr).WithField("level", config.logLevel).Warn("Failed to parse log level from config, using default (error)")
 		} else {
